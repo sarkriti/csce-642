@@ -106,21 +106,21 @@ class PolicyIteration(AbstractSolver):
         ################################
         #   YOUR IMPLEMENTATION HERE   #
         ################################
-        self.V = np.zeros(self.env.observation_space.n)
-        while True:
-            # Policy evaluation
-            self.policy_eval()
-            # Policy improvement
-            policy_stable = True
-            for s in range(self.env.observation_space.n):
-                old_action = np.argmax(self.policy[s])
-                action_values = self.one_step_lookahead(s)
-                best_action = np.argmax(action_values)
-                self.policy[s] = np.eye(self.env.action_space.n)[best_action]
-                if old_action != best_action:
-                    policy_stable = False
-            if policy_stable:
-                break
+        num_states = self.env.observation_space.n
+        num_actions = self.env.action_space.n
+        gamma = self.options.gamma
+
+        P_pi = np.zeros((num_states, num_states))
+        R_pi = np.zeros(num_states)
+        for s in range(num_states):
+            for a in range(num_actions):
+                if self.policy[s, a] == 1:
+                    for prob, next_state, reward, done in self.env.P[s][a]:
+                        P_pi[s, next_state] += prob
+                        R_pi[s] += prob * reward
+
+        I = np.eye(num_states)
+        self.V = np.linalg.solve(I - gamma * P_pi, R_pi)
 
     def create_greedy_policy(self):
         """
