@@ -199,22 +199,20 @@ class AsynchVI(ValueIteration):
         # Do a one-step lookahead to find the best action       #
         # Update the value function. Ref: Sutton book eq. 4.10. #
         #########################################################
-        self.V[state] = self.one_step_lookahead(state).max()
-        # Pop the state with the highest priority (most negative priority value)
+
         if self.pq.isEmpty():
             return
         state = self.pq.pop()
-        # Perform one-step lookahead and update value
+
         best_action_value = self.one_step_lookahead(state).max()
-        delta = abs(self.V[state] - best_action_value)
         self.V[state] = best_action_value
 
-        # For each predecessor, update its priority in the queue
         for p in self.pred.get(state, []):
             A = self.one_step_lookahead(p)
             best_action_value_p = np.max(A)
             priority = -abs(self.V[p] - best_action_value_p)
             self.pq.update(p, priority)
+            
         # you can ignore this part
         self.statistics[Statistics.Rewards.value] = np.sum(self.V)
         self.statistics[Statistics.Steps.value] = -1
