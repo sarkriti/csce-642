@@ -101,6 +101,14 @@ class DQN(AbstractSolver):
         ################################
         #   YOUR IMPLEMENTATION HERE   #
         ################################
+        action_probs = np.ones(self.env.action_space.n) * self.options.epsilon / self.env.action_space.n
+        # convert state to torch tensor (add batch dim) and get q-values from model
+        state_tensor = torch.as_tensor(state, dtype=torch.float32).unsqueeze(0)
+        with torch.no_grad():
+            q_values = self.model(state_tensor).squeeze(0).cpu().numpy()
+        best_action = int(np.argmax(q_values))
+        action_probs[best_action] += 1.0 - self.options.epsilon
+        return action_probs
 
 
     def compute_target_values(self, next_states, rewards, dones):
@@ -113,6 +121,18 @@ class DQN(AbstractSolver):
         ################################
         #   YOUR IMPLEMENTATION HERE   #
         ################################
+        next_q_values = self.target_model(next_states)
+        max_next_q_values, _ = torch.max(next_q_values, dim=1)
+        target_q = rewards + self.options.gamma * max_next_q_values * (1 - dones)
+        rewards = rewards.view(-1)
+        dones = dones.view(-1)
+
+        with torch.no_grad():
+            next_q_values = self.target_model(next_states)  # shape [B, n_actions]
+            max_next_q_values, _ = torch.max(next_q_values, dim=1)  # shape [B]
+            target_q = rewards + self.options.gamma * max_next_q_values * (1 - dones)
+
+        return target_q
 
 
     def replay(self):
@@ -188,7 +208,32 @@ class DQN(AbstractSolver):
             ################################
             #   YOUR IMPLEMENTATION HERE   #
             ################################
+            probs = self.epsilon_greedy(state)
+            action = int(np.random.choice(np.arange(self.env.action_space.n), p=probs))
 
+            step_result = self.env.step(action)
+            if len(step_result) == 5:
+                next_state, reward, terminated, truncated, _ = step_result
+                done = bool(terminated or truncated)
+            else:
+                next_state, reward, done, _ = step_result
+                done = bool(done)
+
+            self.memorize(state, action, reward, next_state, done)
+            state = next_state
+
+            self.n_steps += 1
+            self.replay()
+
+            if self.options.update_target_estimator_every and self.n_steps % self.options.update_target_estimator_every == 0:
+                self.update_target_model()
+
+            if done:
+                break
+
+        if self.options.update_target_estimator_every:
+            self.update_target_model()
+        self.replay()
 
     def __str__(self):
         return "DQN"
