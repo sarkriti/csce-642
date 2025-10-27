@@ -97,42 +97,43 @@ class DQN(AbstractSolver):
             torch.argmax(values): Returns the index corresponding to the highest value in
                 'values' (a tensor)
         """
-        # Don't forget to convert the states to torch tensors to pass them through the network.
+
         ################################
         #   YOUR IMPLEMENTATION HERE   #
         ################################
         action_probs = np.ones(self.env.action_space.n) * self.options.epsilon / self.env.action_space.n
-        # convert state to torch tensor (add batch dim) and get q-values from model
+
         state_tensor = torch.as_tensor(state, dtype=torch.float32).unsqueeze(0)
         with torch.no_grad():
-            q_values = self.model(state_tensor).squeeze(0).cpu().numpy()
+            q_values = self.target_model(state_tensor).squeeze(0).cpu().numpy()
         best_action = int(np.argmax(q_values))
         action_probs[best_action] += 1.0 - self.options.epsilon
         return action_probs
 
 
+    
     def compute_target_values(self, next_states, rewards, dones):
-        """
-        Computes the target q values.
+            """
+            Computes the target q values.
 
-        Returns:
-            The target q value (as a tensor) of shape [len(next_states)]
-        """
-        ################################
-        #   YOUR IMPLEMENTATION HERE   #
-        ################################
-        next_q_values = self.target_model(next_states)
-        max_next_q_values, _ = torch.max(next_q_values, dim=1)
-        target_q = rewards + self.options.gamma * max_next_q_values * (1 - dones)
-        rewards = rewards.view(-1)
-        dones = dones.view(-1)
+            Returns:
+                The target q value (as a tensor) of shape [len(next_states)]
+            """
+  
+            rewards = rewards.view(-1).to(next_states.device).float()
+            dones = dones.view(-1).to(next_states.device).float()
 
-        with torch.no_grad():
-            next_q_values = self.target_model(next_states)  # shape [B, n_actions]
-            max_next_q_values, _ = torch.max(next_q_values, dim=1)  # shape [B]
-            target_q = rewards + self.options.gamma * max_next_q_values * (1 - dones)
+       
+            if next_states.dim() == 1:
+                next_states = next_states.unsqueeze(0)
+            next_states = next_states.to(rewards.device).float()
 
-        return target_q
+            
+            q_next = self.target_model(next_states)  
+            max_q_next, _ = q_next.max(dim=1)
+            target_q = rewards + (1.0 - dones) * self.options.gamma * max_q_next
+
+            return target_q
 
 
     def replay(self):
@@ -208,8 +209,8 @@ class DQN(AbstractSolver):
             ################################
             #   YOUR IMPLEMENTATION HERE   #
             ################################
-            probs = self.epsilon_greedy(state)
-            action = int(np.random.choice(np.arange(self.env.action_space.n), p=probs))
+            prob = self.epsilon_greedy(state)
+            action = int(np.random.choice(np.arange(self.env.action_space.n), p=prob))
 
             step_result = self.env.step(action)
             if len(step_result) == 5:
