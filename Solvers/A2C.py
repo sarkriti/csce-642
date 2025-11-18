@@ -130,6 +130,30 @@ class A2C(AbstractSolver):
             # only ONCE at EACH step in    #
             # an episode.                  # 
             ################################
+            action, prob, value = self.select_action(state)
+            next_state, reward, done, _ = self.step(action)
+
+            # Convert to tensors
+            reward = torch.as_tensor(reward, dtype=torch.float32)
+            next_state_tensor = torch.as_tensor(next_state, dtype=torch.float32)
+
+            # Get the value of the next state
+            _, next_value = self.actor_critic(next_state_tensor)
+
+            # Calculate the TD target
+            target = reward + (1 - done) * self.options.gamma * next_value.detach()
+
+            # Calculate the advantage
+            advantage = target - value
+
+            # Update the actor-critic network
+            self.update_actor_critic(advantage, prob, value)
+
+            # Update the state
+            state = next_state
+
+            if done:
+                break
 
     def actor_loss(self, advantage, prob):
         """
@@ -149,7 +173,9 @@ class A2C(AbstractSolver):
         """
         ################################
         #   YOUR IMPLEMENTATION HERE   #
-        ################################)
+        ################################
+        policy_gradient_integral = -torch.log(prob) * advantage
+        return policy_gradient_integral
 
     def critic_loss(self, advantage, value):
         """
@@ -165,6 +191,8 @@ class A2C(AbstractSolver):
         ################################
         #   YOUR IMPLEMENTATION HERE   #
         ################################
+        critic_gradient_integral = -advantage.detach() * value
+        return critic_gradient_integral
 
     def __str__(self):
         return "A2C"
