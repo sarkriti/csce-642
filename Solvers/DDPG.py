@@ -154,6 +154,12 @@ class DDPG(AbstractSolver):
         ################################
         #   YOUR IMPLEMENTATION HERE   #
         ################################
+        # Greedy next actions from target policy
+        next_actions = self.target_actor_critic.pi(next_states)
+        # Q-values for next states and actions from target critic
+        q_next = self.target_actor_critic.q(next_states, next_actions)
+        # TD target: r + gamma * (1 - done) * q_next
+        return rewards + (1.0 - dones) * self.options.gamma * q_next
 
 
     def replay(self):
@@ -220,6 +226,40 @@ class DDPG(AbstractSolver):
             ################################
             #   YOUR IMPLEMENTATION HERE   #
             ################################
+            for _ in range(self.options.steps):
+                # sample action from policy
+                action = self.select_action(state)
+
+                # perform action in the environment (support different gym APIs)
+                res = self.step(action)
+                if isinstance(res, tuple) or isinstance(res, list):
+                    if len(res) == 3:
+                        next_state, reward, done = res
+                    elif len(res) == 4:
+                        next_state, reward, done, _ = res
+                    elif len(res) == 5:
+                        next_state, reward, terminated, truncated, _ = res
+                        done = terminated or truncated
+                    else:
+                        next_state, reward, done = res[0], res[1], res[2]
+                else:
+                    # unexpected return, stop training this episode
+                    break
+
+                # store transition
+                self.memorize(state, action, reward, next_state, done)
+
+                # move to next state
+                state = next_state
+
+                # sample from replay and update networks
+                self.replay()
+
+                # update target networks using Polyak averaging
+                self.update_target_networks()
+
+                if done:
+                    break
             
 
     def q_loss(self, current_q, target_q):
@@ -236,6 +276,9 @@ class DDPG(AbstractSolver):
         ################################
         #   YOUR IMPLEMENTATION HERE   #
         ################################
+        # element-wise MSE (unreduced), downstream code calls .mean()
+        return F.mse_loss(current_q, target_q, reduction="none")
+        
 
     def pi_loss(self, states):
         """
@@ -258,6 +301,9 @@ class DDPG(AbstractSolver):
         ################################
         #   YOUR IMPLEMENTATION HERE   #
         ################################
+        actions = self.actor_critic.pi(states)
+        q_values = self.actor_critic.q(states, actions)
+        return -q_values
 
     def __str__(self):
         return "DDPG"
